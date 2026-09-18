@@ -3,15 +3,21 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 )
 
 func main() {
 	fmt.Println("Go Website Analyzer v1.0.0")
 	
-	websites := []string{
-		"https://google.com",
-		"https://github.com",
+	var websites []string
+	if len(os.Args) > 1 {
+		websites = os.Args[1:]
+	} else {
+		websites = []string{
+			"https://google.com",
+			"https://github.com",
+		}
 	}
 
 	for _, url := range websites {
