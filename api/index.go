@@ -11,68 +11,40 @@ import (
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	siteURL := r.FormValue("url")
-
-	// Input Page - koi bhi link daal sakte ho
-	if siteURL == "" {
+	site := r.FormValue("url")
+	if site == "" {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#f5f5f5;font-family:Arial}.card{background:white;max-width:800px;margin:60px auto;padding:35px;border-radius:10px;box-shadow:0 2px 10px #0001}input{width:100%;padding:12px;border:1px solid #ccc;border-radius:5px;margin-top:8px}button{background:#0d6efd;color:#fff;padding:12px 22px;border:0;border-radius:5px;margin-top:12px;cursor:pointer}</style></head><body><div class="card"><h1>Web Page Analyzer</h1><p>Enter a URL to analyze its HTML structure and links.</p><form><label><b>Website URL:</b></label><input name="url" placeholder="https://google.com or https://youtube.com" required><button>Analyze</button></form></div></body></html>`)
+		fmt.Fprint(w, `<html><head><title>Web Page Analyzer</title><style>body{font-family:Arial;background:#f8f9fa}.box{background:#fff;max-width:700px;margin:60px auto;padding:30px;border-radius:8px;box-shadow:0 2px 8px #ddd}input{width:100%;padding:12px;border:1px solid #ccc;border-radius:4px;margin:10px 0}button{background:#0d6efd;color:#fff;padding:10px 22px;border:none;border-radius:4px;cursor:pointer}</style></head><body><div class="box"><h1>Web Page Analyzer</h1><p>Enter a URL to analyze its HTML structure and links.</p><form method="POST"><label><b>Website URL:</b></label><input type="text" name="url" value="https://apple.com" placeholder="https://example.com"><button type="submit">Analyze</button></form></div></body></html>`)
 		return
 	}
-
-	if!strings.HasPrefix(siteURL, "http") {
-		siteURL = "https://" + siteURL
-	}
-	parsed, _ := url.Parse(siteURL)
-
-	resp, err := http.Get(siteURL)
-	if err!= nil {
-		fmt.Fprintf(w, "Error fetching %s : %v <br><a href='/'>Back</a>", siteURL, err)
-		return
-	}
+	if!strings.HasPrefix(site, "http") { site = "https://" + site }
+	parsed, _ := url.Parse(site)
+	start := time.Now()
+	resp, err := http.Get(site)
+	if err!= nil { fmt.Fprintf(w, "Error: %v", err); return }
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	body := string(b)
 	lower := strings.ToLower(body)
-
 	title := "N/A"
-	if m := regexp.MustCompile(`(?i)<title>(.*?)</title>`).FindStringSubmatch(body); len(m) > 1 {
-		title = m[1]
-	}
-	htmlVer := "HTML5"
-	login := "No"
-	if strings.Contains(lower, `type="password"`) {
-		login = "Yes"
-	}
-
+	if m := regexp.MustCompile(`(?i)<title>(.*?)</title>`).FindStringSubmatch(body); len(m) > 1 { title = strings.TrimSpace(m[1]) }
 	h1 := strings.Count(lower, "<h1")
 	h2 := strings.Count(lower, "<h2")
 	h3 := strings.Count(lower, "<h3")
 	h4 := strings.Count(lower, "<h4")
 	h5 := strings.Count(lower, "<h5")
 	h6 := strings.Count(lower, "<h6")
-
 	re := regexp.MustCompile(`(?i)<a[^>]+href="([^"]+)"`)
-	matches := re.FindAllStringSubmatch(body, -1)
-	intC, extC := 0, 0
-	var links []string
-	for _, mm := range matches {
-		l := mm[1]
-		if l == "" || strings.HasPrefix(l, "#") || strings.HasPrefix(l, "mailto:") {
-			continue
-		}
-		links = append(links, l)
-		if strings.HasPrefix(l, "/") || strings.Contains(l, parsed.Host) {
-			intC++
-		} else {
-			extC++
-		}
+	all := re.FindAllStringSubmatch(body, -1)
+	intL, extL := 0, 0
+	for _, mm := range all {
+		if strings.HasPrefix(mm[1], "/") || strings.Contains(mm[1], parsed.Host) { intL++ } else { extL++ }
 	}
-
 	client := &http.Client{Timeout: 2 * time.Second}
-	var rows string
 	inacc := 0
-	for i := 0; i < len(links) && i < 10; i++ {
-		t := links[i]
-		if strings.HasPrefix(t, "/") {
-			t = "https://"
+	rows := ""
+	for i := 0; i < len(all) && i < 15; i++ {
+		lnk := all[i][1]
+		if strings.HasPrefix(lnk, "/") { lnk = "https://" + parsed.Host + lnk }
+		if!strings.HasPrefix(lnk, "http") { continue }
+		req, _ := http.NewRequest("HEAD",
